@@ -13,6 +13,7 @@ import Animated, {
   useAnimatedScrollHandler,
   runOnJS,
 } from "react-native-reanimated";
+import { GestureDetector, Gesture } from "react-native-gesture-handler";
 
 import { styles } from "./styles";
 import { THEME } from "../../styles/theme";
@@ -26,7 +27,6 @@ import { QuizHeader } from "../../components/QuizHeader";
 import { ConfirmButton } from "../../components/ConfirmButton";
 import { OutlineButton } from "../../components/OutlineButton";
 import { ProgressBar } from "../../components/ProgressBar";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { OverlayFeedback } from "../../components/OverlayFeedback";
 
 interface Params {
@@ -42,11 +42,12 @@ export function Quiz() {
   const [points, setPoints] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [statusReply, setStatusReply] = useState(0);
   const [quiz, setQuiz] = useState<QuizProps>({} as QuizProps);
   const [alternativeSelected, setAlternativeSelected] = useState<null | number>(
     null
   );
+
+  const [statusReply, setStatusReply] = useState(0);
 
   const shake = useSharedValue(0);
   const scrollY = useSharedValue(0);
@@ -93,16 +94,15 @@ export function Quiz() {
     }
 
     if (quiz.questions[currentQuestion].correct === alternativeSelected) {
-      setPoints((prevState) => prevState + 1);
       setStatusReply(1);
+      setPoints((prevState) => prevState + 1);
+      handleNextQuestion();
     } else {
       setStatusReply(2);
       shakeAnimation();
     }
 
     setAlternativeSelected(null);
-
-    handleNextQuestion();
   }
 
   function handleStop() {
@@ -124,7 +124,12 @@ export function Quiz() {
   function shakeAnimation() {
     shake.value = withSequence(
       withTiming(3, { duration: 400, easing: Easing.bounce }),
-      withTiming(0)
+      withTiming(0, undefined, (finished) => {
+        "worklet";
+        if (finished) {
+          runOnJS(handleNextQuestion)();
+        }
+      })
     );
   }
 
@@ -177,10 +182,11 @@ export function Quiz() {
   });
 
   const onPan = Gesture.Pan()
-    .activateAfterLongPress(75)
+    .activateAfterLongPress(200)
     .onUpdate((event) => {
-      const moveTopLeft = event.translationX < 0;
-      if (moveTopLeft) {
+      const moveToLeft = event.translationX < 0;
+
+      if (moveToLeft) {
         cardPosition.value = event.translationX;
       }
     })
@@ -188,17 +194,15 @@ export function Quiz() {
       if (event.translationX < CARD_SKIP_AREA) {
         runOnJS(handleSkipConfirm)();
       }
+
       cardPosition.value = withTiming(0);
     });
 
   const dragStyles = useAnimatedStyle(() => {
     const rotateZ = cardPosition.value / CARD_INCLINATION;
-
     return {
       transform: [
-        {
-          translateX: cardPosition.value,
-        },
+        { translateX: cardPosition.value },
         { rotateZ: `${rotateZ}deg` },
       ],
     };
@@ -217,6 +221,7 @@ export function Quiz() {
   return (
     <View style={styles.container}>
       <OverlayFeedback status={statusReply} />
+
       <Animated.View style={fixedProgressBarStyles}>
         <Text style={styles.title}>{quiz.title}</Text>
         <ProgressBar
@@ -246,6 +251,7 @@ export function Quiz() {
               question={quiz.questions[currentQuestion]}
               alternativeSelected={alternativeSelected}
               setAlternativeSelected={setAlternativeSelected}
+              onUnmount={() => setStatusReply(0)}
             />
           </Animated.View>
         </GestureDetector>
