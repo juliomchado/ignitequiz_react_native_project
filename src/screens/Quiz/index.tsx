@@ -173,6 +173,7 @@ export function Quiz() {
   });
 
   const onPan = Gesture.Pan()
+    .activateAfterLongPress(75)
     .onUpdate((event) => {
       const moveTopLeft = event.translationX < 0;
       if (moveTopLeft) {
